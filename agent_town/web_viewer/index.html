@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Town — Pixel Art Office Viewer</title>
+<style>
+/* ─── RESET & GLOBAL ──────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;700&display=swap');
+
+:root {
+  --bg: #0e0e1a;
+  --panel: #161625;
+  --panel-border: #2a2a42;
+  --accent: #e8c840;
+  --accent2: #4890d0;
+  --text: #d8d0c0;
+  --text-muted: #706878;
+  --green: #58c070;
+  --red: #e06060;
+  --orange: #e0a040;
+}
+html, body { height:100%; background: var(--bg); color: var(--text); font-family:'Inter',sans-serif; overflow:hidden; }
+
+/* ─── LAYOUT ──────────────────────────────────────────── */
+#app { display:flex; flex-direction:column; height:100vh; }
+
+/* Header */
+#header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 8px 16px; background: var(--panel); border-bottom: 2px solid var(--panel-border);
+  min-height: 48px;
+}
+#header .logo { font-family:'Press Start 2P',monospace; font-size:11px; color:var(--accent); letter-spacing:1px; }
+#header .day-info { font-family:'Press Start 2P',monospace; font-size:10px; color:var(--text); }
+#header .status-pill {
+  font-family:'Press Start 2P',monospace; font-size:8px; padding:4px 10px;
+  border-radius:4px; letter-spacing:0.5px;
+}
+#header .status-pill.playing { background:#1a3a1a; color:var(--green); border:1px solid var(--green); }
+#header .status-pill.paused  { background:#3a2a0a; color:var(--accent); border:1px solid var(--accent); }
+.metrics { display:flex; gap:16px; font-size:11px; }
+.metrics .metric { display:flex; align-items:center; gap:4px; }
+.metrics .label { color:var(--text-muted); font-size:9px; text-transform:uppercase; }
+.metrics .value { font-weight:700; }
+.metrics .value.budget { color:var(--green); }
+.metrics .value.rep { color:var(--accent2); }
+.metrics .value.mood { color:var(--accent); }
+
+/* Main Area */
+#main { display:flex; flex:1; overflow:hidden; }
+
+/* Canvas Container */
+#canvas-wrap {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  background: #0a0a14; position:relative; overflow:hidden;
+}
+#office-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: pointer;
+}
+
+/* Right Panel */
+#right-panel {
+  width: 320px; background: var(--panel); border-left: 2px solid var(--panel-border);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+#panel-tabs {
+  display:flex; border-bottom:2px solid var(--panel-border);
+}
+#panel-tabs .tab {
+  flex:1; padding:8px 4px; text-align:center; font-size:10px; font-weight:600;
+  text-transform:uppercase; cursor:pointer; border:none; background:transparent;
+  color:var(--text-muted); letter-spacing:0.5px; transition: all 0.2s;
+}
+#panel-tabs .tab.active { color:var(--accent); border-bottom:2px solid var(--accent); background:rgba(232,200,64,0.05); }
+#panel-tabs .tab:hover { color:var(--text); }
+
+#panel-content {
+  flex:1; overflow-y:auto; padding:12px;
+  scrollbar-width:thin; scrollbar-color: var(--panel-border) transparent;
+}
+
+/* Agent Inspector Card */
+.agent-card {
+  background: rgba(255,255,255,0.03); border:1px solid var(--panel-border);
+  border-radius:8px; padding:14px; margin-bottom:10px;
+}
+.agent-card .agent-header { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.agent-card .avatar {
+  width:36px; height:36px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+  font-family:'Press Start 2P',monospace; font-size:14px; color:#fff;
+}
+.agent-card .agent-name { font-weight:700; font-size:14px; }
+.agent-card .agent-dept { font-size:10px; color:var(--text-muted); text-transform:uppercase; }
+.agent-card .agent-action { font-size:11px; padding:3px 8px; border-radius:4px; display:inline-block; margin-top:4px; }
+
+.stat-row { display:flex; justify-content:space-between; font-size:11px; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04); }
+.stat-row .stat-label { color:var(--text-muted); }
+
+.reasoning-box {
+  background:rgba(0,0,0,0.3); border:1px solid var(--panel-border); border-radius:6px;
+  padding:10px; margin-top:10px; font-size:11px; line-height:1.5;
+  color:var(--text); font-style:italic; max-height:120px; overflow-y:auto;
+}
+.reasoning-box::before { content:'"'; font-size:18px; color:var(--accent); margin-right:4px; }
+
+/* Controls Bar */
+#controls {
+  display:flex; align-items:center; gap:8px; padding:8px 12px;
+  background:var(--panel); border-top:2px solid var(--panel-border); border-bottom:2px solid var(--panel-border);
+}
+#controls button {
+  background:rgba(255,255,255,0.06); border:1px solid var(--panel-border);
+  color:var(--text); padding:6px 14px; border-radius:4px; cursor:pointer;
+  font-size:11px; font-weight:600; transition:all 0.15s;
+}
+#controls button:hover { background:rgba(255,255,255,0.12); border-color:var(--accent); }
+#controls button.active { background:rgba(232,200,64,0.15); border-color:var(--accent); color:var(--accent); }
+#controls .speed-label { font-size:10px; color:var(--text-muted); margin-left:8px; }
+#progress-bar { flex:1; height:6px; background:rgba(255,255,255,0.08); border-radius:3px; margin:0 10px; cursor:pointer; position:relative; }
+#progress-fill { height:100%; background:var(--accent2); border-radius:3px; transition:width 0.2s; }
+#progress-text { font-size:9px; color:var(--text-muted); font-family:'Press Start 2P',monospace; white-space:nowrap; }
+
+/* Bottom Agent Bar */
+#agent-bar {
+  display:flex; gap:4px; padding:6px 10px;
+  background:var(--panel); border-top:2px solid var(--panel-border);
+  min-height:72px; overflow-x:auto;
+}
+.agent-chip {
+  display:flex; align-items:center; gap:8px; padding:6px 12px;
+  background:rgba(255,255,255,0.03); border:2px solid var(--panel-border);
+  border-radius:8px; cursor:pointer; transition:all 0.15s; min-width:150px; flex-shrink:0;
+}
+.agent-chip:hover { border-color:var(--text-muted); background:rgba(255,255,255,0.06); }
+.agent-chip.selected { border-color:var(--accent); background:rgba(232,200,64,0.08); }
+.agent-chip .chip-avatar {
+  width:32px; height:32px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+  font-family:'Press Start 2P',monospace; font-size:12px; color:#fff; flex-shrink:0;
+}
+.agent-chip .chip-info { display:flex; flex-direction:column; gap:2px; }
+.agent-chip .chip-name { font-weight:700; font-size:11px; }
+.agent-chip .chip-status { font-size:9px; color:var(--text-muted); display:flex; align-items:center; gap:4px; }
+.agent-chip .chip-status .dot { width:6px; height:6px; border-radius:50%; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- HEADER -->
+  <div id="header">
+    <div class="logo">🏢 AGENT TOWN</div>
+    <div class="day-info">DAY <span id="day-num">---</span></div>
+    <div id="status-pill" class="status-pill paused">⏸ PAUSED</div>
+    <div class="metrics">
+      <div class="metric"><span class="label">Budget</span><span class="value budget" id="m-budget">$0</span></div>
+      <div class="metric"><span class="label">Rep</span><span class="value rep" id="m-rep">100</span></div>
+      <div class="metric"><span class="label">Market</span><span class="value mood" id="m-mood">BOOM</span></div>
+    </div>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls">
+    <button id="btn-prev" title="Previous Day">◀</button>
+    <button id="btn-play" title="Play/Pause">▶ Play</button>
+    <button id="btn-next" title="Next Day">▶▎</button>
+    <span class="speed-label">Speed:</span>
+    <button id="btn-slower">−</button>
+    <span id="speed-val" class="speed-label" style="color:var(--accent);">1.0s</span>
+    <button id="btn-faster">+</button>
+    <div id="progress-bar"><div id="progress-fill" style="width:0%"></div></div>
+    <span id="progress-text">0/0</span>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="canvas-wrap">
+      <canvas id="office-canvas" width="800" height="480"></canvas>
+    </div>
+    <div id="right-panel">
+      <div id="panel-tabs">
+        <button class="tab active" data-tab="inspector">🔍 Inspector</button>
+        <button class="tab" data-tab="overview">📋 Overview</button>
+      </div>
+      <div id="panel-content"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM AGENT BAR -->
+  <div id="agent-bar" id="agent-bar"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  AGENT TOWN — PIXEL ART OFFICE VIEWER
+//  Reads data from /api/data (served by viewer_web.py)
+//  NEVER writes to any simulation file.
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── PALETTE ─────────────────────────────────────────────────────
+const P = {
+  // Outdoor
+  grass1:'#5a9a38', grass2:'#4e8830', grass3:'#68a848', path:'#c0b080',
+  // Building
+  wallDark:'#4a3c2e', wallMid:'#5c4e3e', wallLight:'#6e5e4e', wallTop:'#3a2e20', wallHighlight:'#7e6e5e',
+  // Floors
+  woodA:'#c0a070', woodB:'#b09060', woodHi:'#d0b888',
+  carpetA:'#705858', carpetB:'#685050',
+  tileA:'#c8c0b0', tileB:'#b8b0a0',
+  // Furniture
+  desk:'#8b7355', deskEdge:'#6b5535', monitor:'#1a2030', monGlow:'#508ac0',
+  chairBase:'#484858', chairSeat:'#5858a0',
+  bookshelf:'#6b5535', bookRed:'#c05040', bookBlue:'#4060a0', bookGreen:'#408040',
+  plant:'#48a048', plantDk:'#308030', pot:'#a08060', potDk:'#806040',
+  tableWood:'#8b6b45', tableDk:'#6b4b25',
+  whiteboard:'#d8dce0', wbFrame:'#909898',
+  coffeeMachine:'#504540', coffeeLight:'#50c060',
+  sofaBase:'#504870', sofaCushion:'#6860a0',
+  rugA:'#906050', rugB:'#a07060',
+  // UI/Text
+  speechBg:'#f0ece0', speechBorder:'#504830', speechText:'#282018',
+  bubbleAction:'#e8c840',
+};
+
+// ─── AGENT DEFINITIONS ──────────────────────────────────────────
+const AGENT_PALETTE = {
+  '1': { body:'#4890d0', bodyHi:'#68b0e8', hair:'#3a2820', skin:'#e0c0a0', name:'Sam' },
+  '2': { body:'#48b868', bodyHi:'#68d888', hair:'#201818', skin:'#c09870', name:'Priya' },
+  '3': { body:'#9078d0', bodyHi:'#b098e8', hair:'#583828', skin:'#e0c8b0', name:'Alex' },
+  '4': { body:'#e0a040', bodyHi:'#f0c060', hair:'#282018', skin:'#b88860', name:'Jordan' },
+  '5': { body:'#e070a8', bodyHi:'#f098c0', hair:'#201018', skin:'#d0a880', name:'Riya' },
+  '6': { body:'#d05050', bodyHi:'#e87070', hair:'#181010', skin:'#b88060', name:'Vikram' },
+};
+
+// ─── CANVAS SETUP ────────────────────────────────────────────────
+const canvas = document.getElementById('office-canvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+const CW = 800, CH = 480;
+const T = 16; // tile size
+
+// ─── ROOM DEFINITIONS (in tile coords) ──────────────────────────
+const ROOMS = [
+  { id:'engineering', label:'ENGINEERING ⚙', x:2, y:2, w:14, h:12, floor:'wood',  dept:'Engineering' },
+  { id:'sales',       label:'SALES 📊',      x:18,y:2, w:14, h:12, floor:'wood',  dept:'Sales' },
+  { id:'meeting',     label:'MEETING ROOM 🏛',x:34,y:2, w:14, h:12, floor:'carpet',dept:null },
+  { id:'support',     label:'SUPPORT 🎧',    x:2, y:16,w:14, h:12, floor:'wood',  dept:'Support' },
+  { id:'marketing',   label:'MARKETING 📣',  x:18,y:16,w:14, h:12, floor:'wood',  dept:'Marketing' },
+  { id:'breakroom',   label:'BREAK ROOM ☕',  x:34,y:16,w:14, h:12, floor:'tile',  dept:null },
+];
+
+// Agent target positions within rooms (in pixels, relative to room top-left)
+function getAgentSlots(room, index, total) {
+  const cx = room.x * T + (room.w * T) / 2;
+  const cy = room.y * T + (room.h * T) / 2 + 16;
+  if (total <= 1) return { x: cx, y: cy };
+  const spread = Math.min(total * 40, room.w * T - 60);
+  const offset = (index - (total - 1) / 2) * (spread / Math.max(1, total - 1));
+  return { x: cx + offset, y: cy + (index % 2) * 20 - 10 };
+}
+
+// ─── STATE ───────────────────────────────────────────────────────
+let agents = {};         // { id: { name, department, ... } }
+let timeline = {};       // { day: { snapshot:{}, actions:{ agentId: {} } } }
+let days = [];           // sorted day numbers
+let dayIndex = 0;
+let isPlaying = false;
+let playbackSpeed = 1.5; // seconds per day
+let selectedId = '1';
+let activeTab = 'inspector';
+let tick = 0;
+
+// Agent visual states for smooth movement
+let agentStates = {};    // { id: { x, y, tx, ty, action, walking, frame, bobPhase } }
+
+// Timers
+let dayTimer = 0;
+let allArrived = true;
+
+const WALK_SPEED = 1.8; // pixels per frame
+
+// ─── DATA LOADING ────────────────────────────────────────────────
+async function loadData() {
+  const resp = await fetch('/api/data');
+  const data = await resp.json();
+
+  // Build agents map
+  for (const a of data.agents) {
+    agents[String(a.id)] = a;
+  }
+
+  // Build timeline
+  for (const s of data.snapshots) {
+    timeline[s.day] = timeline[s.day] || {};
+    timeline[s.day].snapshot = s;
+  }
+  for (const a of data.actions) {
+    timeline[a.day] = timeline[a.day] || {};
+    timeline[a.day].actions = timeline[a.day].actions || {};
+    timeline[a.day].actions[String(a.agent_id)] = a;
+  }
+
+  days = Object.keys(timeline).map(Number).sort((a,b) => a-b);
+  if (days.length === 0) { alert('No simulation data found!'); return; }
+
+  // Init agent states at their department rooms
+  for (const [id, ag] of Object.entries(agents)) {
+    const room = ROOMS.find(r => r.dept === ag.department) || ROOMS[0];
+    const pos = getAgentSlots(room, 0, 1);
+    agentStates[id] = { x: pos.x, y: pos.y, tx: pos.x, ty: pos.y, action:'idle', walking:false, frame:0, bobPhase: Math.random()*Math.PI*2 };
+  }
+
+  // Set targets for first day
+  setDayTargets(days[0]);
+  // Snap to targets immediately for first frame
+  for (const [id, s] of Object.entries(agentStates)) { s.x = s.tx; s.y = s.ty; }
+
+  buildAgentBar();
+  updateUI();
+  requestAnimationFrame(gameLoop);
+}
+
+// ─── TARGETING ───────────────────────────────────────────────────
+function setDayTargets(day) {
+  const dayData = timeline[day] || {};
+  const actions = dayData.actions || {};
+
+  // Group agents by their target room
+  const roomGroups = {};
+  for (const [id, ag] of Object.entries(agents)) {
+    const act = actions[id];
+    const action = (act && act.action) ? act.action.toLowerCase() : 'work';
+    let targetRoom;
+
+    if (action === 'eat') {
+      targetRoom = ROOMS.find(r => r.id === 'breakroom');
+    } else if (action === 'meeting') {
+      targetRoom = ROOMS.find(r => r.id === 'meeting');
+    } else {
+      targetRoom = ROOMS.find(r => r.dept === ag.department) || ROOMS[0];
+    }
+
+    const roomId = targetRoom.id;
+    if (!roomGroups[roomId]) roomGroups[roomId] = [];
+    roomGroups[roomId].push({ id, action, room: targetRoom });
+  }
+
+  // Assign positions within each room
+  for (const [roomId, group] of Object.entries(roomGroups)) {
+    group.forEach((entry, idx) => {
+      const pos = getAgentSlots(entry.room, idx, group.length);
+      const state = agentStates[entry.id];
+      if (state) {
+        state.tx = pos.x;
+        state.ty = pos.y;
+        state.action = entry.action;
+        state.walking = true;
+      }
+    });
+  }
+}
+
+// ─── UPDATE LOOP ─────────────────────────────────────────────────
+function update() {
+  tick++;
+
+  // Move agents toward targets
+  allArrived = true;
+  for (const [id, s] of Object.entries(agentStates)) {
+    const dx = s.tx - s.x;
+    const dy = s.ty - s.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+
+    if (dist > 2) {
+      allArrived = false;
+      s.walking = true;
+      const speed = Math.min(WALK_SPEED, dist);
+      s.x += (dx / dist) * speed;
+      s.y += (dy / dist) * speed;
+      s.frame = Math.floor(tick / 8) % 4;
+    } else {
+      s.x = s.tx;
+      s.y = s.ty;
+      s.walking = false;
+      s.frame = 0;
+    }
+    s.bobPhase += 0.03;
+  }
+
+  // Auto-play: advance day when all agents arrived and timer expires
+  if (isPlaying && allArrived) {
+    dayTimer += 1/60;
+    if (dayTimer >= playbackSpeed) {
+      dayTimer = 0;
+      advanceDay(1);
+    }
+  }
+}
+
+function advanceDay(dir) {
+  const newIdx = dayIndex + dir;
+  if (newIdx >= 0 && newIdx < days.length) {
+    dayIndex = newIdx;
+    setDayTargets(days[dayIndex]);
+    dayTimer = 0;
+    updateUI();
+  } else if (dir > 0) {
+    isPlaying = false;
+    updateUI();
+  }
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────
+function render() {
+  ctx.clearRect(0, 0, CW, CH);
+
+  drawOutdoor();
+  drawRooms();
+  drawFurniture();
+  drawAgents();
+  drawBubbles();
+}
+
+function drawOutdoor() {
+  // Grass background
+  for (let x = 0; x < CW; x += T) {
+    for (let y = 0; y < CH; y += T) {
+      const shade = ((x/T + y/T) % 3 === 0) ? P.grass2 : ((x/T + y/T) % 3 === 1) ? P.grass1 : P.grass3;
+      ctx.fillStyle = shade;
+      ctx.fillRect(x, y, T, T);
+    }
+  }
+  // Path between building rows
+  for (let x = 1*T; x < 49*T; x += T) {
+    ctx.fillStyle = P.path;
+    ctx.fillRect(x, 14*T, T, 2*T);
+  }
+  // Small flowers
+  const rng = mulberry32(42);
+  for (let i = 0; i < 30; i++) {
+    const fx = rng() * CW;
+    const fy = rng() * CH;
+    // Only draw if outside building
+    if (!isInsideAnyRoom(fx, fy)) {
+      const colors = ['#e05050','#e0e050','#d050d0','#f0a030','#5080f0'];
+      ctx.fillStyle = colors[i % colors.length];
+      ctx.fillRect(Math.floor(fx/2)*2, Math.floor(fy/2)*2, 3, 3);
+      ctx.fillStyle = '#309030';
+      ctx.fillRect(Math.floor(fx/2)*2, Math.floor(fy/2)*2+3, 3, 2);
+    }
+  }
+}
+
+function isInsideAnyRoom(px, py) {
+  for (const r of ROOMS) {
+    const rx = r.x*T - 4, ry = r.y*T - 4;
+    const rw = r.w*T + 8, rh = r.h*T + 8;
+    if (px >= rx && px <= rx+rw && py >= ry && py <= ry+rh) return true;
+  }
+  // Path
+  if (py >= 14*T - 2 && py <= 16*T + 2 && px >= 1*T && px <= 49*T) return true;
+  return false;
+}
+
+function drawRooms() {
+  for (const room of ROOMS) {
+    const rx = room.x * T, ry = room.y * T;
+    const rw = room.w * T, rh = room.h * T;
+
+    // Floor tiles
+    for (let tx = 0; tx < room.w; tx++) {
+      for (let ty = 0; ty < room.h; ty++) {
+        const isAlt = (tx + ty) % 2;
+        let col;
+        if (room.floor === 'wood') col = isAlt ? P.woodA : P.woodB;
+        else if (room.floor === 'carpet') col = isAlt ? P.carpetA : P.carpetB;
+        else col = isAlt ? P.tileA : P.tileB;
+        ctx.fillStyle = col;
+        ctx.fillRect(rx + tx*T, ry + ty*T, T, T);
+        // Subtle grid line
+        ctx.fillStyle = 'rgba(0,0,0,0.06)';
+        ctx.fillRect(rx + tx*T + T-1, ry + ty*T, 1, T);
+        ctx.fillRect(rx + tx*T, ry + ty*T + T-1, T, 1);
+      }
+    }
+
+    // Walls — thick border style
+    ctx.fillStyle = P.wallDark;
+    // Top wall (thick)
+    ctx.fillRect(rx-4, ry-8, rw+8, 10);
+    // Left wall
+    ctx.fillRect(rx-4, ry-8, 6, rh+12);
+    // Right wall
+    ctx.fillRect(rx+rw-2, ry-8, 6, rh+12);
+    // Bottom wall
+    ctx.fillRect(rx-4, ry+rh, rw+8, 6);
+
+    // Wall highlight
+    ctx.fillStyle = P.wallHighlight;
+    ctx.fillRect(rx-4, ry-8, rw+8, 2);
+    ctx.fillRect(rx-4, ry-8, 2, rh+12);
+
+    // Wall mid tone
+    ctx.fillStyle = P.wallMid;
+    ctx.fillRect(rx-2, ry-6, rw+4, 3);
+
+    // Room label
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(rx+4, ry+2, room.label.length * 6.5 + 8, 12);
+    ctx.fillStyle = '#d0c8b0';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText(room.label, rx+8, ry+11);
+  }
+}
+
+function drawFurniture() {
+  for (const room of ROOMS) {
+    const rx = room.x * T, ry = room.y * T;
+    const rw = room.w * T, rh = room.h * T;
+
+    if (room.id === 'engineering' || room.id === 'sales' || room.id === 'support' || room.id === 'marketing') {
+      // Desks with monitors
+      drawDesk(rx + 16, ry + 30);
+      drawDesk(rx + 16, ry + 90);
+      drawDesk(rx + rw - 64, ry + 30);
+      if (room.id !== 'marketing') drawDesk(rx + rw - 64, ry + 90);
+      // Whiteboard
+      drawWhiteboard(rx + rw/2 - 24, ry + 12);
+      // Plant
+      drawPlant(rx + rw - 24, ry + rh - 30);
+      if (room.id === 'engineering') drawPlant(rx + 10, ry + rh - 30);
+      // Bookshelf  
+      if (room.id === 'support' || room.id === 'sales') {
+        drawBookshelf(rx + 8, ry + 20);
+      }
+    }
+    else if (room.id === 'meeting') {
+      // Conference table (large oval)
+      drawConferenceTable(rx + rw/2 - 50, ry + rh/2 - 16, 100, 40);
+      // Chairs around table
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI * 2 / 6) * i;
+        const cx = rx + rw/2 + Math.cos(angle) * 64;
+        const cy = ry + rh/2 + Math.sin(angle) * 38;
+        drawChair(cx - 5, cy - 5);
+      }
+      drawWhiteboard(rx + 10, ry + 14);
+      drawPlant(rx + rw - 24, ry + 16);
+      drawPlant(rx + rw - 24, ry + rh - 30);
+    }
+    else if (room.id === 'breakroom') {
+      // Café tables
+      drawCafeTable(rx + 30, ry + 40);
+      drawCafeTable(rx + 100, ry + 40);
+      drawCafeTable(rx + 170, ry + 40);
+      // Counter
+      ctx.fillStyle = P.desk;
+      ctx.fillRect(rx + 10, ry + rh - 30, rw - 20, 14);
+      ctx.fillStyle = P.deskEdge;
+      ctx.fillRect(rx + 10, ry + rh - 30 + 14, rw - 20, 2);
+      // Coffee machines
+      drawCoffeeMachine(rx + 15, ry + rh - 48);
+      drawCoffeeMachine(rx + 38, ry + rh - 48);
+      // Vending machine
+      ctx.fillStyle = '#505868';
+      ctx.fillRect(rx + rw - 30, ry + 20, 20, 32);
+      ctx.fillStyle = '#4080c0';
+      ctx.fillRect(rx + rw - 28, ry + 24, 16, 16);
+      ctx.fillStyle = '#60c070';
+      ctx.fillRect(rx + rw - 26, ry + 44, 4, 4);
+      // Plant
+      drawPlant(rx + rw - 24, ry + rh - 30);
+    }
+  }
+}
+
+// ─── FURNITURE DRAWING HELPERS ───────────────────────────────────
+function drawDesk(x, y) {
+  // Desk surface
+  ctx.fillStyle = P.desk;
+  ctx.fillRect(x, y, 44, 20);
+  ctx.fillStyle = P.deskEdge;
+  ctx.fillRect(x, y+20, 44, 2);
+  // Legs
+  ctx.fillStyle = P.deskEdge;
+  ctx.fillRect(x+2, y+22, 3, 6);
+  ctx.fillRect(x+39, y+22, 3, 6);
+  // Monitor
+  ctx.fillStyle = P.monitor;
+  ctx.fillRect(x+12, y-14, 20, 14);
+  ctx.fillStyle = P.monGlow;
+  ctx.fillRect(x+14, y-12, 16, 10);
+  // Monitor stand
+  ctx.fillStyle = '#404050';
+  ctx.fillRect(x+20, y, 4, 2);
+  // Keyboard
+  ctx.fillStyle = '#383838';
+  ctx.fillRect(x+10, y+4, 16, 4);
+}
+
+function drawChair(x, y) {
+  ctx.fillStyle = P.chairBase;
+  ctx.fillRect(x, y, 10, 10);
+  ctx.fillStyle = P.chairSeat;
+  ctx.fillRect(x+1, y+1, 8, 8);
+}
+
+function drawWhiteboard(x, y) {
+  ctx.fillStyle = P.wbFrame;
+  ctx.fillRect(x, y, 48, 26);
+  ctx.fillStyle = P.whiteboard;
+  ctx.fillRect(x+2, y+2, 44, 22);
+  // Scribble lines
+  ctx.fillStyle = '#a0a8b0';
+  for (let i = 0; i < 3; i++) {
+    ctx.fillRect(x+6, y+6 + i*7, 30 - i*6, 1);
+  }
+  // Red dot marker
+  ctx.fillStyle = '#e04040';
+  ctx.fillRect(x+38, y+18, 4, 4);
+}
+
+function drawPlant(x, y) {
+  // Pot
+  ctx.fillStyle = P.pot;
+  ctx.fillRect(x+2, y+10, 12, 10);
+  ctx.fillStyle = P.potDk;
+  ctx.fillRect(x+2, y+10, 12, 2);
+  // Leaves
+  ctx.fillStyle = P.plant;
+  ctx.fillRect(x, y, 6, 8);
+  ctx.fillRect(x+5, y-4, 6, 10);
+  ctx.fillRect(x+10, y, 6, 8);
+  ctx.fillStyle = P.plantDk;
+  ctx.fillRect(x+3, y+2, 4, 4);
+  ctx.fillRect(x+9, y-1, 4, 5);
+}
+
+function drawBookshelf(x, y) {
+  ctx.fillStyle = P.bookshelf;
+  ctx.fillRect(x, y, 14, 40);
+  // Shelves
+  ctx.fillStyle = P.deskEdge;
+  ctx.fillRect(x, y+12, 14, 2);
+  ctx.fillRect(x, y+26, 14, 2);
+  // Books
+  const bookColors = [P.bookRed, P.bookBlue, P.bookGreen, P.bookRed, P.bookBlue, '#d0a040'];
+  for (let s = 0; s < 3; s++) {
+    const sy = y + 2 + s * 14;
+    for (let b = 0; b < 3; b++) {
+      ctx.fillStyle = bookColors[(s*3+b) % bookColors.length];
+      ctx.fillRect(x + 2 + b*4, sy, 3, 9);
+    }
+  }
+}
+
+function drawConferenceTable(x, y, w, h) {
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(x+w/2+2, y+h/2+3, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
+  // Table
+  ctx.fillStyle = P.tableWood;
+  ctx.beginPath(); ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2); ctx.fill();
+  ctx.strokeStyle = P.tableDk;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(x+w/2, y+h/2, w/2, h/2, 0, 0, Math.PI*2); ctx.stroke();
+  // Inner highlight
+  ctx.strokeStyle = '#a0855a';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(x+w/2, y+h/2, w/2-8, h/2-5, 0, 0, Math.PI*2); ctx.stroke();
+}
+
+function drawCafeTable(x, y) {
+  ctx.fillStyle = P.tableWood;
+  ctx.fillRect(x, y, 32, 20);
+  ctx.fillStyle = P.tableDk;
+  ctx.fillRect(x, y+20, 32, 2);
+  // Cups
+  ctx.fillStyle = '#e0d8c8';
+  ctx.fillRect(x+6, y+4, 5, 5);
+  ctx.fillStyle = '#80604a';
+  ctx.fillRect(x+7, y+5, 3, 3);
+}
+
+function drawCoffeeMachine(x, y) {
+  ctx.fillStyle = P.coffeeMachine;
+  ctx.fillRect(x, y, 16, 20);
+  ctx.fillStyle = '#383028';
+  ctx.fillRect(x+3, y+10, 10, 8);
+  ctx.fillStyle = P.coffeeLight;
+  ctx.fillRect(x+6, y+3, 4, 4);
+}
+
+// ─── CHARACTER SPRITE ────────────────────────────────────────────
+function drawAgent(id, x, y, isWalking, frame) {
+  const pal = AGENT_PALETTE[id];
+  if (!pal) return;
+  const st = agentStates[id];
+  const isSelected = (id === selectedId);
+  const px = Math.round(x), py = Math.round(y);
+
+  // Idle bob
+  const bob = isWalking ? 0 : Math.sin(st.bobPhase) * 1.5;
+  const walkBob = isWalking ? Math.abs(Math.sin(tick * 0.3)) * 2 : 0;
+  const offsetY = Math.round(bob - walkBob);
+
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(px, py + 14, 8, 3, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Selection halo
+  if (isSelected) {
+    const pulse = Math.sin(tick * 0.08) * 0.3 + 0.7;
+    ctx.strokeStyle = `rgba(232,200,64,${pulse})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(px, py + offsetY - 2, 14, 18, 0, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // Legs (walking animation)
+  ctx.fillStyle = '#383848';
+  if (isWalking) {
+    const legOffset = Math.sin(tick * 0.4) * 3;
+    ctx.fillRect(px - 4 + legOffset, py + 8 + offsetY, 3, 6);
+    ctx.fillRect(px + 1 - legOffset, py + 8 + offsetY, 3, 6);
+  } else {
+    ctx.fillRect(px - 4, py + 8 + offsetY, 3, 5);
+    ctx.fillRect(px + 1, py + 8 + offsetY, 3, 5);
+  }
+
+  // Body
+  ctx.fillStyle = pal.body;
+  ctx.fillRect(px - 5, py - 2 + offsetY, 10, 11);
+  // Body highlight
+  ctx.fillStyle = pal.bodyHi;
+  ctx.fillRect(px - 4, py - 1 + offsetY, 4, 7);
+
+  // Arms
+  ctx.fillStyle = pal.body;
+  if (isWalking) {
+    const armSwing = Math.sin(tick * 0.4) * 2;
+    ctx.fillRect(px - 7, py + offsetY + armSwing, 2, 7);
+    ctx.fillRect(px + 5, py + offsetY - armSwing, 2, 7);
+  } else {
+    ctx.fillRect(px - 7, py + offsetY, 2, 7);
+    ctx.fillRect(px + 5, py + offsetY, 2, 7);
+  }
+  // Hands
+  ctx.fillStyle = pal.skin;
+  ctx.fillRect(px - 7, py + 6 + offsetY, 2, 2);
+  ctx.fillRect(px + 5, py + 6 + offsetY, 2, 2);
+
+  // Head
+  ctx.fillStyle = pal.skin;
+  ctx.fillRect(px - 5, py - 10 + offsetY, 10, 9);
+  // Hair
+  ctx.fillStyle = pal.hair;
+  ctx.fillRect(px - 5, py - 12 + offsetY, 10, 4);
+  ctx.fillRect(px - 6, py - 11 + offsetY, 2, 3);
+  ctx.fillRect(px + 4, py - 11 + offsetY, 2, 3);
+  // Eyes
+  ctx.fillStyle = '#202020';
+  ctx.fillRect(px - 3, py - 6 + offsetY, 2, 2);
+  ctx.fillRect(px + 1, py - 6 + offsetY, 2, 2);
+  // Mouth (tiny)
+  ctx.fillStyle = '#c08060';
+  ctx.fillRect(px - 1, py - 3 + offsetY, 2, 1);
+}
+
+// ─── SPEECH BUBBLES ──────────────────────────────────────────────
+function drawBubbles() {
+  const dayData = timeline[days[dayIndex]] || {};
+  const actions = dayData.actions || {};
+
+  for (const [id, s] of Object.entries(agentStates)) {
+    if (s.walking) continue; // Don't show bubble while walking
+
+    const act = actions[id];
+    const actionText = act ? act.action.toUpperCase() : 'IDLE';
+
+    // Bubble dimensions
+    ctx.font = '7px "Press Start 2P", monospace';
+    const textW = ctx.measureText(actionText).width;
+    const bw = textW + 12;
+    const bh = 14;
+    const bx = Math.round(s.x - bw/2);
+    const by = Math.round(s.y - 30);
+
+    // Bubble background
+    ctx.fillStyle = P.speechBg;
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = P.speechBorder;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, bw, bh);
+    // Pointer triangle
+    ctx.fillStyle = P.speechBg;
+    ctx.beginPath();
+    ctx.moveTo(bx + bw/2 - 3, by + bh);
+    ctx.lineTo(bx + bw/2, by + bh + 4);
+    ctx.lineTo(bx + bw/2 + 3, by + bh);
+    ctx.fill();
+    ctx.strokeStyle = P.speechBorder;
+    ctx.beginPath();
+    ctx.moveTo(bx + bw/2 - 3, by + bh);
+    ctx.lineTo(bx + bw/2, by + bh + 4);
+    ctx.lineTo(bx + bw/2 + 3, by + bh);
+    ctx.stroke();
+
+    // Action text
+    ctx.fillStyle = P.speechText;
+    ctx.fillText(actionText, bx + 6, by + 10);
+  }
+}
+
+// ─── DRAW ALL AGENTS (depth sorted) ─────────────────────────────
+function drawAgents() {
+  // Sort by Y for proper depth ordering
+  const sorted = Object.entries(agentStates).sort((a,b) => a[1].y - b[1].y);
+  for (const [id, s] of sorted) {
+    drawAgent(id, s.x, s.y, s.walking, s.frame);
+  }
+}
+
+// ─── GAME LOOP ───────────────────────────────────────────────────
+function gameLoop(ts) {
+  update();
+  render();
+  requestAnimationFrame(gameLoop);
+}
+
+// ─── UI UPDATES ──────────────────────────────────────────────────
+function updateUI() {
+  const day = days[dayIndex];
+  const dayData = timeline[day] || {};
+  const snapshot = dayData.snapshot || {};
+
+  document.getElementById('day-num').textContent = day;
+  document.getElementById('m-budget').textContent = '$' + (snapshot.budget || 0).toLocaleString();
+  document.getElementById('m-rep').textContent = (snapshot.reputation || 100) + '/100';
+  document.getElementById('m-mood').textContent = (snapshot.market_mood || 'boom').toUpperCase();
+
+  const pill = document.getElementById('status-pill');
+  pill.className = 'status-pill ' + (isPlaying ? 'playing' : 'paused');
+  pill.textContent = isPlaying ? '▶ PLAYING' : '⏸ PAUSED';
+
+  document.getElementById('btn-play').textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+  document.getElementById('btn-play').className = isPlaying ? 'active' : '';
+  document.getElementById('speed-val').textContent = playbackSpeed.toFixed(1) + 's';
+  document.getElementById('progress-text').textContent = `${dayIndex+1}/${days.length}`;
+  document.getElementById('progress-fill').style.width = days.length > 1 ? ((dayIndex/(days.length-1))*100)+'%' : '0%';
+
+  updateInspector();
+  updateAgentBarSelection();
+}
+
+function updateInspector() {
+  const panel = document.getElementById('panel-content');
+  const day = days[dayIndex];
+  const dayData = timeline[day] || {};
+  const actions = dayData.actions || {};
+
+  if (activeTab === 'inspector') {
+    const ag = agents[selectedId];
+    const act = actions[selectedId] || {};
+    const pal = AGENT_PALETTE[selectedId] || {};
+
+    if (!ag) { panel.innerHTML = '<p style="color:var(--text-muted)">Select an agent</p>'; return; }
+
+    const actionStr = (act.action || 'idle').toUpperCase();
+    const actionColor = actionStr === 'WORK' ? 'var(--accent2)' :
+                        actionStr === 'REST' || actionStr === 'EAT' ? 'var(--accent)' :
+                        actionStr === 'MEETING' ? 'var(--green)' :
+                        actionStr.includes('STRESS') ? 'var(--red)' : 'var(--text-muted)';
+
+    const targetName = act.target_agent_id && agents[act.target_agent_id]
+      ? `→ ${agents[act.target_agent_id].name}` : '';
+
+    panel.innerHTML = `
+      <div class="agent-card">
+        <div class="agent-header">
+          <div class="avatar" style="background:${pal.body || '#555'}">${(ag.name||'?')[0]}</div>
+          <div>
+            <div class="agent-name">${ag.name}</div>
+            <div class="agent-dept">${ag.department || '?'}</div>
+            <span class="agent-action" style="background:${actionColor}22;color:${actionColor};border:1px solid ${actionColor}44">${actionStr}</span>
+            ${targetName ? `<span style="color:var(--accent);font-size:11px;margin-left:8px">${targetName}</span>` : ''}
+          </div>
+        </div>
+        <div class="stat-row"><span class="stat-label">Energy</span><span>${ag.energy ?? '?'}</span></div>
+        <div class="stat-row"><span class="stat-label">Stress</span><span>${ag.stress ?? '?'}</span></div>
+        <div class="stat-row"><span class="stat-label">Morale</span><span>${ag.morale ?? '?'}</span></div>
+        <div class="stat-row"><span class="stat-label">Skill</span><span>${ag.skill ?? '?'}</span></div>
+        <div class="reasoning-box">${act.reasoning || 'No reasoning logged for this day.'}</div>
+      </div>
+    `;
+  } else {
+    // Overview tab — show all agents for this day
+    let html = '<h3 style="font-size:12px;margin-bottom:10px;color:var(--accent)">All Agents — Day ' + day + '</h3>';
+    for (const [id, ag] of Object.entries(agents)) {
+      const act = actions[id] || {};
+      const pal = AGENT_PALETTE[id] || {};
+      const actionStr = (act.action || 'idle').toUpperCase();
+      html += `
+        <div class="agent-card" style="padding:8px;cursor:pointer;${id===selectedId?'border-color:var(--accent)':''}" onclick="selectAgent('${id}')">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="avatar" style="background:${pal.body||'#555'};width:24px;height:24px;font-size:10px">${(ag.name||'?')[0]}</div>
+            <span style="font-weight:600;font-size:12px">${ag.name}</span>
+            <span style="font-size:9px;color:var(--text-muted);margin-left:auto">${actionStr}</span>
+          </div>
+        </div>
+      `;
+    }
+    panel.innerHTML = html;
+  }
+}
+
+function buildAgentBar() {
+  const bar = document.getElementById('agent-bar');
+  bar.innerHTML = '';
+  for (const [id, ag] of Object.entries(agents)) {
+    const pal = AGENT_PALETTE[id] || {};
+    const chip = document.createElement('div');
+    chip.className = 'agent-chip' + (id === selectedId ? ' selected' : '');
+    chip.dataset.id = id;
+    chip.onclick = () => selectAgent(id);
+    chip.innerHTML = `
+      <div class="chip-avatar" style="background:${pal.body || '#555'}">${(ag.name||'?')[0]}</div>
+      <div class="chip-info">
+        <span class="chip-name">${ag.name}</span>
+        <span class="chip-status"><span class="dot" style="background:var(--green)"></span> ${ag.department}</span>
+      </div>
+    `;
+    bar.appendChild(chip);
+  }
+}
+
+function updateAgentBarSelection() {
+  document.querySelectorAll('.agent-chip').forEach(c => {
+    c.classList.toggle('selected', c.dataset.id === selectedId);
+  });
+}
+
+function selectAgent(id) {
+  selectedId = id;
+  updateUI();
+}
+
+// ─── CANVAS CLICK → AGENT SELECTION ─────────────────────────────
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = CW / rect.width;
+  const scaleY = CH / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+
+  let closestId = null, closestDist = 20;
+  for (const [id, s] of Object.entries(agentStates)) {
+    const dist = Math.sqrt((mx - s.x)**2 + (my - s.y)**2);
+    if (dist < closestDist) { closestDist = dist; closestId = id; }
+  }
+  if (closestId) selectAgent(closestId);
+});
+
+// ─── CONTROL BUTTONS ─────────────────────────────────────────────
+document.getElementById('btn-play').addEventListener('click', () => {
+  isPlaying = !isPlaying; dayTimer = 0; updateUI();
+});
+document.getElementById('btn-prev').addEventListener('click', () => {
+  isPlaying = false; advanceDay(-1); updateUI();
+});
+document.getElementById('btn-next').addEventListener('click', () => {
+  isPlaying = false; advanceDay(1); updateUI();
+});
+document.getElementById('btn-faster').addEventListener('click', () => {
+  playbackSpeed = Math.max(0.3, playbackSpeed - 0.3); updateUI();
+});
+document.getElementById('btn-slower').addEventListener('click', () => {
+  playbackSpeed = Math.min(5, playbackSpeed + 0.3); updateUI();
+});
+// Progress bar click
+document.getElementById('progress-bar').addEventListener('click', (e) => {
+  const rect = e.target.getBoundingClientRect();
+  const pct = (e.clientX - rect.left) / rect.width;
+  dayIndex = Math.min(days.length - 1, Math.max(0, Math.round(pct * (days.length - 1))));
+  setDayTargets(days[dayIndex]);
+  for (const s of Object.values(agentStates)) { s.x = s.tx; s.y = s.ty; s.walking = false; }
+  updateUI();
+});
+// Tabs
+document.querySelectorAll('#panel-tabs .tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('#panel-tabs .tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    activeTab = tab.dataset.tab;
+    updateUI();
+  });
+});
+// Keyboard
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); isPlaying = !isPlaying; dayTimer = 0; updateUI(); }
+  else if (e.code === 'ArrowLeft') { isPlaying = false; advanceDay(-1); updateUI(); }
+  else if (e.code === 'ArrowRight') { isPlaying = false; advanceDay(1); updateUI(); }
+  else if (e.code === 'Equal' || e.code === 'NumpadAdd') { playbackSpeed = Math.max(0.3, playbackSpeed - 0.3); updateUI(); }
+  else if (e.code === 'Minus' || e.code === 'NumpadSubtract') { playbackSpeed = Math.min(5, playbackSpeed + 0.3); updateUI(); }
+});
+
+// ─── UTILITY ─────────────────────────────────────────────────────
+function mulberry32(a) {
+  return function() {
+    var t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ─── RESPONSIVE CANVAS SIZING ────────────────────────────────────
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  const maxW = wrap.clientWidth - 16;
+  const maxH = wrap.clientHeight - 16;
+  const scale = Math.min(maxW / CW, maxH / CH);
+  canvas.style.width = Math.floor(CW * scale) + 'px';
+  canvas.style.height = Math.floor(CH * scale) + 'px';
+}
+window.addEventListener('resize', resizeCanvas);
+
+// ─── INIT ────────────────────────────────────────────────────────
+loadData().then(() => {
+  resizeCanvas();
+  console.log('Agent Town Pixel Art Viewer loaded!');
+});
+
+</script>
+</body>
+</html>
