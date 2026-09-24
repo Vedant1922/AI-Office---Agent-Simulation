@@ -76,3 +76,5 @@ vikram_test_output.txt
 # OS files
 .DS_Store
 Thumbs.db
+*.txt
+!README.md
